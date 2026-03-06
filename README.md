@@ -1,0 +1,1 @@
+Pubsub eventbus implementation made for learning and perhaps maybe for use in other personal projects.

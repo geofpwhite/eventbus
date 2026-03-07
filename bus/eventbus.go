@@ -3,7 +3,6 @@ package bus
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/geofpwhite/eventbus/pubsub"
@@ -48,7 +47,6 @@ func (tb *TopicBus) Loop() {
 			}
 			tb.subscriberMut.Unlock()
 		case <-tb.publisherCloseChannel:
-			fmt.Println(tb.numPublishers)
 			tb.numPublishers--
 			if tb.numPublishers == 0 {
 				tb.done()

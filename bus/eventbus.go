@@ -3,6 +3,7 @@ package bus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/geofpwhite/eventbus/pubsub"
@@ -20,14 +21,14 @@ type EventBus struct {
 
 type TopicBus struct {
 	ctx                   context.Context
-	done                  context.CancelFunc // this is used to stop the topic bus loop when the topic is deleted
-	numPublishers         int
-	publisherCloseChannel chan struct{}
-	topic                 string
+	done                  context.CancelFunc    // this is used to stop the topic bus loop when the number of publishers goes to 0
 	subscribers           map[int]chan<- []byte // map exists so subcribers can be removed without changing ID of other subscribers
+	publisherCloseChannel chan struct{}
 	publishers            chan []byte
 	subscriberMut         sync.Mutex
+	topic                 string
 	curID                 int
+	numPublishers         int
 }
 
 func (tb *TopicBus) Loop() {
@@ -47,6 +48,7 @@ func (tb *TopicBus) Loop() {
 			}
 			tb.subscriberMut.Unlock()
 		case <-tb.publisherCloseChannel:
+			fmt.Println(tb.numPublishers)
 			tb.numPublishers--
 			if tb.numPublishers == 0 {
 				tb.done()
@@ -67,8 +69,9 @@ func (tb *TopicBus) AddSubscriber() (int, <-chan []byte) {
 func (tb *TopicBus) NewPublisher() pubsub.Publisher {
 	tb.numPublishers++
 	p := publisher{
-		channel: tb.publishers,
-		topic:   tb.topic,
+		channel:      tb.publishers,
+		topic:        tb.topic,
+		closeChannel: tb.publisherCloseChannel,
 	}
 	return &p
 }

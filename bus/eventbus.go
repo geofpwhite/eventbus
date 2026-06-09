@@ -14,23 +14,23 @@ var (
 	ErrSubscriberDoesNotExist = errors.New("subscriber does not exist")
 )
 
-type EventBus struct {
-	topics map[string]*TopicBus
+type EventBus[T any] struct {
+	topics map[string]*TopicBus[T]
 }
 
-type TopicBus struct {
+type TopicBus[T any] struct {
 	ctx                   context.Context
-	done                  context.CancelFunc    // this is used to stop the topic bus loop when the number of publishers goes to 0
-	subscribers           map[int]chan<- []byte // map exists so subcribers can be removed without changing ID of other subscribers
+	done                  context.CancelFunc // this is used to stop the topic bus loop when the number of publishers goes to 0
+	subscribers           map[int]chan<- T   // map exists so subcribers can be removed without changing ID of other subscribers
 	publisherCloseChannel chan struct{}
-	publishers            chan []byte
+	publishers            chan T
 	subscriberMut         sync.Mutex
 	topic                 string
 	curID                 int
 	numPublishers         int
 }
 
-func (tb *TopicBus) Loop() {
+func (tb *TopicBus[T]) Loop() {
 	for {
 		select {
 		case <-tb.ctx.Done():
@@ -55,18 +55,18 @@ func (tb *TopicBus) Loop() {
 	}
 }
 
-func (tb *TopicBus) AddSubscriber() (int, <-chan []byte) {
+func (tb *TopicBus[T]) AddSubscriber() (int, <-chan T) {
 	tb.subscriberMut.Lock()
 	defer tb.subscriberMut.Unlock()
-	channel := make(chan []byte)
+	channel := make(chan T)
 	tb.subscribers[tb.curID] = channel
 	tb.curID++
 	return tb.curID - 1, channel
 }
 
-func (tb *TopicBus) NewPublisher() pubsub.Publisher {
+func (tb *TopicBus[T]) NewPublisher() pubsub.Publisher[T] {
 	tb.numPublishers++
-	p := publisher{
+	p := publisher[T]{
 		channel:      tb.publishers,
 		topic:        tb.topic,
 		closeChannel: tb.publisherCloseChannel,
@@ -74,7 +74,7 @@ func (tb *TopicBus) NewPublisher() pubsub.Publisher {
 	return &p
 }
 
-func (eb *EventBus) Unsubscribe(topic string, id int) error {
+func (eb *EventBus[T]) Unsubscribe(topic string, id int) error {
 	if topic, ok := eb.topics[topic]; ok {
 		topic.subscriberMut.Lock()
 		defer topic.subscriberMut.Unlock()
@@ -88,10 +88,10 @@ func (eb *EventBus) Unsubscribe(topic string, id int) error {
 	return ErrTopicDoesNotExist
 }
 
-func (eb *EventBus) Subscribe(topic string) (pubsub.Subscriber, error) {
+func (eb *EventBus[T]) Subscribe(topic string) (pubsub.Subscriber[T], error) {
 	if topic, ok := eb.topics[topic]; ok {
 		id, channel := topic.AddSubscriber()
-		s := subscriber{
+		s := subscriber[T]{
 			id:      id,
 			eb:      eb,
 			channel: channel,
@@ -102,24 +102,24 @@ func (eb *EventBus) Subscribe(topic string) (pubsub.Subscriber, error) {
 	return nil, ErrTopicDoesNotExist
 }
 
-func (eb *EventBus) NewTopic(topic string) error {
+func (eb *EventBus[T]) NewTopic(topic string) error {
 	if _, ok := eb.topics[topic]; ok {
 		return ErrTopicAlreadyExists
 	}
 	ctx, done := context.WithCancel(context.Background())
-	eb.topics[topic] = &TopicBus{
+	eb.topics[topic] = &TopicBus[T]{
 		ctx:                   ctx,
 		done:                  done,
 		publisherCloseChannel: make(chan struct{}),
-		publishers:            make(chan []byte),
-		subscribers:           make(map[int]chan<- []byte),
+		publishers:            make(chan T),
+		subscribers:           make(map[int]chan<- T),
 	}
 	go eb.topics[topic].Loop()
 
 	return nil
 }
 
-func (eb *EventBus) NewPublisher(topic string) (pubsub.Publisher, error) {
+func (eb *EventBus[T]) NewPublisher(topic string) (pubsub.Publisher[T], error) {
 	if topic, ok := eb.topics[topic]; ok {
 		return topic.NewPublisher(), nil
 	}
@@ -131,8 +131,8 @@ func (eb *EventBus) NewPublisher(topic string) (pubsub.Publisher, error) {
 	return topicBus.NewPublisher(), nil
 }
 
-func New() *EventBus {
-	return &EventBus{
-		topics: make(map[string]*TopicBus),
+func New[T any]() *EventBus[T] {
+	return &EventBus[T]{
+		topics: make(map[string]*TopicBus[T]),
 	}
 }

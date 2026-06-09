@@ -9,7 +9,7 @@ import (
 
 func Example1pub1sub() {
 	// create a new event bus
-	eb := bus.New()
+	eb := bus.New[[]byte]()
 
 	pub, err := eb.NewPublisher("example-topic")
 	if err != nil {
@@ -43,7 +43,7 @@ func Example1pub1sub() {
 
 func Example2pub2sub() {
 	// create a new event bus
-	eb := bus.New()
+	eb := bus.New[[]byte]()
 	pub, err := eb.NewPublisher("example-topic")
 	if err != nil {
 		panic(err)

@@ -1,6 +1,8 @@
 package main
 
-import "github.com/geofpwhite/eventbus/examples"
+import (
+	"github.com/geofpwhite/eventbus/examples"
+)
 
 func main() {
 	examples.Example2pub2sub()

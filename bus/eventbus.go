@@ -14,9 +14,7 @@ var (
 	ErrSubscriberDoesNotExist = errors.New("subscriber does not exist")
 )
 
-type EventBus[T any] struct {
-	topics map[string]*TopicBus[T]
-}
+type EventBus[T any] map[string]*TopicBus[T]
 
 type TopicBus[T any] struct {
 	ctx                   context.Context
@@ -75,7 +73,7 @@ func (tb *TopicBus[T]) NewPublisher() pubsub.Publisher[T] {
 }
 
 func (eb *EventBus[T]) Unsubscribe(topic string, id int) error {
-	if topic, ok := eb.topics[topic]; ok {
+	if topic, ok := (*eb)[topic]; ok {
 		topic.subscriberMut.Lock()
 		defer topic.subscriberMut.Unlock()
 		if sub, ok := topic.subscribers[id]; ok {
@@ -89,7 +87,7 @@ func (eb *EventBus[T]) Unsubscribe(topic string, id int) error {
 }
 
 func (eb *EventBus[T]) Subscribe(topic string) (pubsub.Subscriber[T], error) {
-	if topic, ok := eb.topics[topic]; ok {
+	if topic, ok := (*eb)[topic]; ok {
 		id, channel := topic.AddSubscriber()
 		s := subscriber[T]{
 			id:      id,
@@ -103,36 +101,35 @@ func (eb *EventBus[T]) Subscribe(topic string) (pubsub.Subscriber[T], error) {
 }
 
 func (eb *EventBus[T]) NewTopic(topic string) error {
-	if _, ok := eb.topics[topic]; ok {
+	if _, ok := (*eb)[topic]; ok {
 		return ErrTopicAlreadyExists
 	}
 	ctx, done := context.WithCancel(context.Background())
-	eb.topics[topic] = &TopicBus[T]{
+	(*eb)[topic] = &TopicBus[T]{
 		ctx:                   ctx,
 		done:                  done,
 		publisherCloseChannel: make(chan struct{}),
 		publishers:            make(chan T),
 		subscribers:           make(map[int]chan<- T),
 	}
-	go eb.topics[topic].Loop()
+	go (*eb)[topic].Loop()
 
 	return nil
 }
 
 func (eb *EventBus[T]) NewPublisher(topic string) (pubsub.Publisher[T], error) {
-	if topic, ok := eb.topics[topic]; ok {
+	if topic, ok := (*eb)[topic]; ok {
 		return topic.NewPublisher(), nil
 	}
 	err := eb.NewTopic(topic)
 	if err != nil {
 		return nil, err
 	}
-	topicBus := eb.topics[topic]
+	topicBus := (*eb)[topic]
 	return topicBus.NewPublisher(), nil
 }
 
 func New[T any]() *EventBus[T] {
-	return &EventBus[T]{
-		topics: make(map[string]*TopicBus[T]),
-	}
+	e := make(EventBus[T])
+	return &e
 }
